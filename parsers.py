@@ -173,91 +173,25 @@ def parse_exit_signal(text):
 
     return señal_procesada
 
-# --- Zona de prueba ---
+def parse_message(text):
+    # Buscamos pistas unicas para identificar el tipo de se;al
+    if "Entry Signal" in text:
+        tipo_detectado = "ENTRY"
+    elif "Trailing Stop Activated" in text:
+        tipo_detectado = "TRAILING_STOP"
+    elif "Exit Signal" in text:
+        tipo_detectado = "EXIT"
+    else:
+        tipo_detectado = None
 
-texto_entry = """🟢 Entry Signal
-📋 Strategy: Drawdown DCA Long
-🏷️ Side: BUY
-💱 Symbol: BTCUSD
-💰 Price: 64848.64
-🆔 Position: 6bcb96ff
-📐 Lot: 0.02
-⏱️ Analysis Timeframe: M30
-📊 Candle: M1
+    # Segun tipo detectado llamamos a la funcion correcta
+    if tipo_detectado == "ENTRY":
+        resultado = parse_entry_signal(text)
+    elif tipo_detectado == "TRAILING_STOP":
+        resultado = parse_trailing_stop(text)
+    elif tipo_detectado == "EXIT":
+        resultado = parse_exit_signal(text)
+    else:
+        resultado = None
 
-Confluence: 3/0
-❌ 📎 ob bounce (+0)
-✅ 📎 fvg fill (+2)
-❌ 📎 momentum (+0)
-❌ 📎 volume (+0)
-✅ 📎 structure bonus (+1)
-
-Structure
-🟢 M30: bullish (trending_up, 76%)
-
-Volatility: 🟢 normal
-ATR: 249.79 (ratio 0.92, P33)
-Size multiplier: 1.0x
-
-SMC Levels
-📦 OB: bullish M15 64645.73-64729.74 (0.25% away)
-🔳 FVG: bullish M15 64729.74-64863.49 (0.08% away)
-Active: 8 OBs, 11 FVGs
-
-Drawdown: 48.65% from cycle high
-Cycle high: 126305.73
-Recovery: 10.42%
-"""
-
-texto_trailing = """📍 Trailing Stop Activated
-
-📋 Strategy: Drawdown DCA Long
-
-💱 BTCUSD @ 64979.21
-
-🔒 SL: 64940.04
-
-📈 Best: 64979.21
-
-🆔 Position: 6bcb96ff
-
-🕒 2026-07-14T23:45:00+00:00
-"""
-
-texto_exit = """"🔴 Exit Signal
-📋 Strategy: Drawdown DCA Long
-🏷️ Side: SELL
-💱 Symbol: BTCUSD
-💰 Price: 64945.92
-🆔 Position: 6bcb96ff
-🕒 Analysis Timeframe: M30
-📊 Candle: M1
-🚪 Exit: atr_trailing_stop
-💚 PnL: +0.15%
-
-Position
-Entry: 64848.64
-High: 64987.61
-Max excursion: +0.21%
-Duration: 12m
-
-Structure
-🟢 M30: bullish (trending_up, 76%)
-
-Volatility: 🟢 normal
-ATR: 249.79 (ratio 0.92, P33)
-Size multiplier: 1.0x
-
-SMC Levels
-📦 OB: bullish M15 64645.73-64729.74 (0.45% away)
-🔳 FVG: bullish M15 64729.74-64863.49 (0.28% away)
-Active: 8 OBs, 11 FVGs
-
-Drawdown: 48.57% from cycle high
-Cycle high: 126305.73
-Recovery: 10.57%"""
-
-resultado_entry = parse_entry_signal(texto_entry)
-resultado_trailing = parse_trailing_stop(texto_trailing)
-resultado_salida = parse_exit_signal(texto_exit)
-print(resultado_salida)
+    return resultado
