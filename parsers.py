@@ -2,21 +2,21 @@ import re
 
 def parse_entry_signal(text):
     # --- Extraer Side ---
-    resultado_side = re.search(r"Side:\s*(\w+)", text)
+    resultado_side = re.search(r"Side:\s*[`*]*(\w+)", text)
     if resultado_side:
         side = resultado_side.group(1)
     else:
         side = None
     
     # --- Extraer Symbol ---
-    resultado_symbol = re.search(r"Symbol:\s*(\w+)", text)
+    resultado_symbol = re.search(r"Symbol:\s*[`*]*(\w+)", text)
     if resultado_symbol:
         symbol = resultado_symbol.group(1)
     else:
         symbol = None
 
     # --- Extraer Price ---
-    resultado_price = re.search(r"Price:\s*([\d.]+)", text)
+    resultado_price = re.search(r"Price:\s*[`*]*([\d.]+)", text)
     if resultado_price:
         price_texto = resultado_price.group(1)
         price = float(price_texto)
@@ -24,7 +24,7 @@ def parse_entry_signal(text):
         price = None
 
     # --- Extraer Position ---
-    resultado_position = re.search(r"Position:\s*(\w+)", text)
+    resultado_position = re.search(r"Position:\s*[`*]*(\w+)", text)
     if resultado_position:
         position_id = resultado_position.group(1)
     else:
@@ -41,9 +41,9 @@ def parse_entry_signal(text):
 
     return señal_procesada
 
-def parse_trailing_stop(text):
+def parse_trailing_stop(text, tipo="TRAILING_STOP_ACTIVATED"):
     # --- Extraer Symbol y Price juntos (vienen en la misma línea, separados por @) ---
-    resultado_symbol_price = re.search(r"(\w+)\s*@\s*([\d.]+)", text)
+    resultado_symbol_price = re.search(r"(\w+)\s*@\s*[`*]*([\d.]+)", text)
     if resultado_symbol_price:
         symbol = resultado_symbol_price.group(1)
         price_texto = resultado_symbol_price.group(2)
@@ -53,7 +53,7 @@ def parse_trailing_stop(text):
         price = None
 
     # --- Extraer SL (stop loss) ---
-    resultado_sl = re.search(r"SL:\s*([\d.]+)",text)
+    resultado_sl = re.search(r"SL:\s*[`*]*([\d.]+)",text)
     if resultado_sl:
         sl_texto = resultado_sl.group(1)
         sl = float(sl_texto)
@@ -61,7 +61,7 @@ def parse_trailing_stop(text):
         sl = None
     
     # --- Extraer Best ---
-    resultado_best = re.search(r"Best:\s*([\d.]+)",text)
+    resultado_best = re.search(r"Best:\s*[`*]*([\d.]+)",text)
     if resultado_best:
         best_texto = resultado_best.group(1)
         best = float(best_texto)
@@ -69,7 +69,7 @@ def parse_trailing_stop(text):
         best = None
     
     # --- Extraer Position ---
-    resultado_position = re.search(r"Position:\s*(\w+)",text)
+    resultado_position = re.search(r"Position:\s*[`*]*(\w+)",text)
     position_id = resultado_position.group(1) if resultado_position else None
 
     # --- Extraer Timestamp ---
@@ -81,7 +81,7 @@ def parse_trailing_stop(text):
     
     # --- Armar el diccionario final ---
     señal_procesada = {
-        "type": "TRAILING_STOP",
+        "type": tipo,
         "symbol": symbol,
         "price": price,
         "sl": sl,
@@ -93,20 +93,20 @@ def parse_trailing_stop(text):
 
 def parse_exit_signal(text):
     # --- Extraer Side ---
-    resultado_side = re.search(r"Side:\s*(\w+)", text)
+    resultado_side = re.search(r"Side:\s*[`*]*(\w+)", text)
     if resultado_side:
         side = resultado_side.group(1)
     else:
         side = None
     # --- Extraer Symbol ---
-    resultado_symbol = re.search(r"Symbol:\s*(\w+)", text)
+    resultado_symbol = re.search(r"Symbol:\s*[`*]*(\w+)", text)
     if resultado_symbol:
         symbol = resultado_symbol.group(1)
     else:
         symbol = None
 
     # --- Extraer Price ---
-    resultado_price = re.search(r"Price:\s*([\d.]+)", text)
+    resultado_price = re.search(r"Price:\s*[`*]*([\d.]+)", text)
     if resultado_price:
         price_texto = resultado_price.group(1)
         price = float(price_texto)
@@ -114,28 +114,28 @@ def parse_exit_signal(text):
         price = None
 
     # --- Extraer Position ---
-    resultado_position = re.search(r"Position:\s*(\w+)", text)
+    resultado_position = re.search(r"Position:\s*[`*]*(\w+)", text)
     if resultado_position:
         position_id = resultado_position.group(1)
     else:
         position_id = None
 
     # --- Extraer Exit reason ---
-    resultado_exit = re.search(r"Exit:\s*(\w+)", text)
+    resultado_exit = re.search(r"Exit:\s*[`*]*(\w+)", text)
     if resultado_exit:
         exit_reason = resultado_exit.group(1)
     else:
         exit_reason = None
 
     # --- Extraer PnL (incluye signo + o -, y símbolo %) ---
-    resultado_pnl = re.search(r"PnL:\s*([+-][\d.]+%)", text)
+    resultado_pnl = re.search(r"PnL:\s*[`*]*([+-][\d.]+%)", text)
     if resultado_pnl:
         pnl = resultado_pnl.group(1)
     else:
         pnl = None
 
     # --- Extraer Entry price ---
-    resultado_entry = re.search(r"Entry:\s*([\d.]+)", text)
+    resultado_entry = re.search(r"Entry:\s*[`*]*([\d.]+)", text)
     if resultado_entry:
         entry_texto = resultado_entry.group(1)
         entry_price = float(entry_texto)
@@ -143,7 +143,7 @@ def parse_exit_signal(text):
         entry_price = None
 
     # --- Extraer High ---
-    resultado_high = re.search(r"High:\s*([\d.]+)", text)
+    resultado_high = re.search(r"High:\s*[`*]*([\d.]+)", text)
     if resultado_high:
         high_texto = resultado_high.group(1)
         high = float(high_texto)
@@ -151,7 +151,7 @@ def parse_exit_signal(text):
         high = None
 
     # --- Extraer Duration ---
-    resultado_duration = re.search(r"Duration:\s*(\w+)", text)
+    resultado_duration = re.search(r"Duration:\s*[`*]*(\w+)", text)
     if resultado_duration:
         duration = resultado_duration.group(1)
     else:
@@ -178,7 +178,9 @@ def parse_message(text):
     if "Entry Signal" in text:
         tipo_detectado = "ENTRY"
     elif "Trailing Stop Activated" in text:
-        tipo_detectado = "TRAILING_STOP"
+        tipo_detectado = "TRAILING_STOP_ACTIVATED"
+    elif "Trailing Stop Tightened" in text:
+        tipo_detectado = "TRAILING_STOP_TIGHTENED"
     elif "Exit Signal" in text:
         tipo_detectado = "EXIT"
     else:
@@ -187,8 +189,10 @@ def parse_message(text):
     # Segun tipo detectado llamamos a la funcion correcta
     if tipo_detectado == "ENTRY":
         resultado = parse_entry_signal(text)
-    elif tipo_detectado == "TRAILING_STOP":
+    elif tipo_detectado == "TRAILING_STOP_ACTIVATED":
         resultado = parse_trailing_stop(text)
+    elif tipo_detectado == "TRAILING_STOP_TIGHTENED":
+        resultado = parse_trailing_stop(text, tipo = "TRAILING_STOP_TIGHTENED")
     elif tipo_detectado == "EXIT":
         resultado = parse_exit_signal(text)
     else:

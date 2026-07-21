@@ -82,6 +82,16 @@ Duration: 12m
     assert resultado["duration"] == "12m"
 
 
+def test_parse_detecta_tipo_trailing_activated():
+    texto_trailing = '📍 **Trailing Stop Activated**\n📋 Strategy: **Drawdown DCA Long**\n💱 BTCUSD @ `66284.21`\n🔒 SL: `66441.88`\n📈 Best: `66475.1`\n🆔 Position: `b680fdf8`\n\n🕐 2026-07-21T21:30:00+00:00'
+    resultado = parse_message(texto_trailing)
+    assert resultado['type'] == 'TRAILING_STOP_ACTIVATED'
+
+def test_parse_detecta_tipo_trailing_thightened():
+    texto_trailing = """📍 **Trailing Stop Tightened**\n📋 Strategy: **Bear Scalp Short**\n💱 BTCUSD @ 65334.41\n🔒 SL: 65394.14 ← 65412.8\n📈 Best: 65328.57\n🆔 Position: 1e2e54a5\n\n🕐 2026-07-20T18:43:00+00:00"""
+    resultado = parse_message(texto_trailing)
+    assert resultado['type'] == 'TRAILING_STOP_TIGHTENED'
+
 def test_parse_message_detecta_tipo_entry():
     texto_entrada = "🟢 Entry Signal\n\n💱 Symbol: BTCUSD"
 
