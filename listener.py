@@ -1,10 +1,8 @@
 import os
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
-
-# Import local: traemos la función parse_message desde parsers.py,
-# el mismo archivo que ya escribiste y probaste con pytest.
 from parsers import parse_message
+from storage import guardar_senal
 
 load_dotenv()
 
@@ -18,7 +16,6 @@ client = TelegramClient("signal_listener_session", api_id, api_hash)
 ID_CANAL_SENALES = -1003651611774
 
 
-
 @client.on(events.NewMessage(chats=ID_CANAL_SENALES))
 async def manejar_mensaje_nuevo(evento):
     texto_mensaje = evento.message.text
@@ -30,8 +27,7 @@ async def manejar_mensaje_nuevo(evento):
         print("----- Señal parseada -----")
         print(resultado)
         print("---------------------------")
-    print(repr(texto_mensaje))
-    
+        guardar_senal(resultado)    
 
 client.start()
 

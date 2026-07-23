@@ -19,3 +19,6 @@ Thumbs.db
 
 # Sesion telegram
 *.session
+
+# Archivo de senales
+senales.json
