@@ -29,10 +29,17 @@ def cerrar_posicion(position_id):
 posiciones = {}
 
 
-abrir_posicion("6bcb96ff", 123456789, "BTCUSD", 0.02)
-abrir_posicion("6bcb96ll", 123456789, "BTCUSD", 0.02)
-print(posiciones)
-cerrar_posicion("6bcb96ff")
-print(posiciones)
+# --- Código que solo se ejecuta si corres este archivo directamente ---
+if __name__ == "__main__":
+    print(posiciones)
 
-cerrar_posicion("no-existe-este-id")
+    abrir_posicion("6bcb96ff", 123456789, "BTCUSD", 0.02)
+    abrir_posicion("6bcb96ll", 123456789, "BTCUSD", 0.02)
+    print(posiciones)
+
+    cerrar_posicion("6bcb96ff")
+    print(posiciones)
+
+    cerrar_posicion("no-existe-este-id")
+
+    
