@@ -1,4 +1,6 @@
 from parsers import parse_message
+from storage import guardar_senal, cargar_senales
+
 
 texto_entrada = """🟢 Entry Signal
 
@@ -63,6 +65,9 @@ Max excursion: +0.21%
 Duration: 12m
 """
 
-print(parse_message(texto_entrada))
-print(parse_message(texto_trailing))
-print(parse_message(texto_salida))
+# Guardamos una señal de prueba, inventada, solo para probar
+señal_de_prueba = {"type": "ENTRY", "symbol": "BTCUSD", "price": 65511.05}
+guardar_senal(señal_de_prueba)
+
+# Ahora cargamos y mostramos lo que quedó guardado
+print(cargar_senales())
