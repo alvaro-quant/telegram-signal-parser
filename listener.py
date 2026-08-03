@@ -13,7 +13,7 @@ api_id = int(api_id_texto)
 
 client = TelegramClient("signal_listener_session", api_id, api_hash)
 
-ID_CANAL_SENALES = -1003651611774
+ID_CANAL_SENALES = int(os.getenv("ID_CANAL"))
 
 
 @client.on(events.NewMessage(chats=ID_CANAL_SENALES))
