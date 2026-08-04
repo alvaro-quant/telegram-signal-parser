@@ -134,8 +134,62 @@ def cerrar_operacion_mt5(ticket):
         print(f"Error al cerrar posición {ticket}: {resultado.comment}")
         return {"exito": False, "motivo": resultado.comment}
 # Corre solo si ejecutamos este archivo directamente, no si lo importamos desde otro módulo.
+def modificar_sl_mt5(ticket, nuevo_sl):
+    conectado = asegurar_conexion()
+    if not conectado:
+        return {"exito": False, "motivo": "No se pudo conectar a MT5"}
 
+    posiciones = mt5.positions_get(ticket=ticket)
+
+    if len(posiciones) == 0:
+        motivo = f"No se encontró una posición abierta con ticket {ticket}"
+        return {"exito": False, "motivo": motivo}
+
+    posicion = posiciones[0]
+
+    solicitud = {
+        "action": mt5.TRADE_ACTION_SLTP,
+        "symbol": posicion.symbol,
+        "position": ticket,
+        "sl": nuevo_sl,
+        "tp": posicion.tp,  # reenviamos el TP actual para no borrarlo
+        "magic": 123456,
+        "comment": "Trailing stop automatizado",
+    }
+
+    resultado = mt5.order_send(solicitud)
+
+    if resultado.retcode == mt5.TRADE_RETCODE_DONE:
+        print(f"SL actualizado para posición {ticket}: nuevo SL {nuevo_sl}")
+        return {"exito": True, "motivo": None}
+    else:
+        print(f"Error al modificar SL de posición {ticket}: {resultado.comment}")
+        return {"exito": False, "motivo": resultado.comment}
 
 if __name__ == "__main__":
-    resultado = cerrar_operacion_mt5(593032011)
-    print(resultado)
+    # --- Prueba manual de modificar_sl_mt5 ---
+    # Abrimos una posición de prueba, le asignamos un SL, y la cerramos.
+    # No necesitamos que el precio se mueva: solo probamos que la función
+    # logre comunicarse con MT5 y aplicar el cambio.
+
+    resultado_apertura = abrir_operacion_mt5("BTCUSD", 0.01, "BUY")
+    print(resultado_apertura)
+
+    if resultado_apertura["exito"]:
+        ticket = resultado_apertura["ticket"]
+
+        # Necesitamos el precio actual para calcular un SL válido.
+        # Para una posición BUY, el SL debe quedar por debajo del precio.
+        symbol_broker = MAPEO_SIMBOLOS.get("BTCUSD", "BTCUSD")
+        tick = mt5.symbol_info_tick(symbol_broker)
+
+        # Restamos una distancia razonable (por ejemplo, 100 puntos de precio)
+        # para asegurarnos de que el SL sea válido y no quede pegado al precio.
+        sl_de_prueba = tick.bid - 100
+
+        resultado_sl = modificar_sl_mt5(ticket, sl_de_prueba)
+        print(resultado_sl)
+
+        # Cerramos la posición de prueba para no dejarla abierta.
+        resultado_cierre = cerrar_operacion_mt5(ticket)
+        print(resultado_cierre)
