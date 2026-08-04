@@ -1,10 +1,12 @@
 # state_manager.py
-def abrir_posicion(position_id, mt5_ticket, symbol, lot):
+def abrir_posicion(position_id, mt5_ticket, symbol, lot,side):
     detalles = {
         "mt5_ticket": mt5_ticket,
         "symbol": symbol,
         "lot": lot,
-        "status": "OPEN"
+        "side": side,
+        "status": "OPEN",
+        "sl": None
     }
 
     posiciones[position_id] = detalles
@@ -26,6 +28,16 @@ def cerrar_posicion(position_id):
     else:
         print(f"No se encontró la posición: {position_id}")
         return False
+
+def actualizar_sl(position_id, nuevo_sl):
+    """
+    Actualiza el stop loss guardado para una posición existente.
+    Se usa cada vez que confirmamos (y aplicamos en MT5) un nuevo
+    trailing stop reportado por el bot de Telegram.
+    """
+    if position_id in posiciones:
+        posiciones[position_id]["sl"] = nuevo_sl
+
 posiciones = {}
 
 

@@ -12,7 +12,7 @@ def limpiar_posiciones():
     # Todo lo que iría DESPUÉS del yield correría al TERMINAR cada test.
 
 def test_abrir_posicion_guarda_datos_correctos():
-    abrir_posicion("6bcb96ff", 123456789, "BTCUSD", 0.02)
+    abrir_posicion("6bcb96ff", 123456789, "BTCUSD", 0.02, "BUY")
     resultado = obtener_posicion("6bcb96ff")
 
     assert resultado is not None
@@ -20,10 +20,11 @@ def test_abrir_posicion_guarda_datos_correctos():
     assert resultado["symbol"] == "BTCUSD"
     assert resultado["lot"] == 0.02
     assert resultado["status"] == "OPEN"
+    assert resultado["side"] == "BUY"
 
 # Cerrar una posición existente y verificar que su status cambia a "CLOSED".
 def test_cerrar_posicion_cambia_status_a_closed():
-    abrir_posicion("6bcb96ff", 123456789, "BTCUSD", 0.02)
+    abrir_posicion("6bcb96ff", 123456789, "BTCUSD", 0.02, "BUY")
 
     resultado_cierre = cerrar_posicion("6bcb96ff")
     assert resultado_cierre is True
@@ -40,3 +41,4 @@ def test_cerrar_id_inexistente_denvuelve_false():
 def test_consultar_id_inexistente_devuelve_none():
     resultado = obtener_posicion("325gdfgh34234")
     assert resultado is None
+
