@@ -77,11 +77,21 @@ def abrir_operacion_mt5(symbol, lot, side):
     resultado = mt5.order_send(solicitud)
 
     if resultado.retcode == mt5.TRADE_RETCODE_DONE:
-        print(f"Orden ejecutada: {side} {lot} lotes de {symbol_broker}, ticket {resultado.order}")
-        return {"exito": True, "ticket": resultado.order, "motivo": None}
+            volumen_ejecutado = resultado.volume
+
+            if volumen_ejecutado < lot:
+                print(f"Advertencia: fill parcial. Solicitado {lot}, ejecutado {volumen_ejecutado}")
+
+            print(f"Orden ejecutada: {side} {volumen_ejecutado} lotes de {symbol_broker}, ticket {resultado.order}")
+            return {
+                "exito": True,
+                "ticket": resultado.order,
+                "volumen_ejecutado": volumen_ejecutado,
+                "motivo": None,
+            }
     else:
         print(f"Orden rechazada: {resultado.comment}")
-        return {"exito": False, "ticket": None, "motivo": resultado.comment}
+        return {"exito": False, "ticket": None, "volumen_ejecutado": None, "motivo": resultado.comment}
 
 def cerrar_operacion_mt5(ticket):
     conectado = asegurar_conexion()
