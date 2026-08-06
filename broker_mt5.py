@@ -74,7 +74,16 @@ def abrir_operacion_mt5(symbol, lot, side):
         "comment": "Apertura automatizada",
     }
 
-    resultado = mt5.order_send(solicitud)
+    try:
+        resultado = mt5.order_send(solicitud)
+    except Exception as error:
+        print(f"Excepción al enviar la orden de apertura para {symbol_broker}: {error}")
+        resultado = None
+
+    if resultado is None:
+        motivo = "Sin respuesta del servidor al enviar la orden de apertura (posible caída de conexión)"
+        print(f"Orden rechazada: {motivo}")
+        return {"exito": False, "ticket": None, "volumen_ejecutado": None, "motivo": motivo}
 
     if resultado.retcode == mt5.TRADE_RETCODE_DONE:
             volumen_ejecutado = resultado.volume
@@ -135,7 +144,16 @@ def cerrar_operacion_mt5(ticket):
         "comment": "Cierre automatizado",
     }
 
-    resultado = mt5.order_send(solicitud)
+    try:
+        resultado = mt5.order_send(solicitud)
+    except Exception as error:
+        print(f"Excepción al enviar la orden de cierre para {ticket}: {error}")
+        resultado = None
+
+    if resultado is None:
+        motivo = "Sin respuesta del servidor al enviar la orden de cierre (posible caída de conexión)"
+        print(f"Error al cerrar posición {ticket}: {motivo}")
+        return {"exito": False, "motivo": motivo}
 
     if resultado.retcode == mt5.TRADE_RETCODE_DONE:
         print(f"Posición {ticket} cerrada correctamente.")
@@ -167,8 +185,16 @@ def modificar_sl_mt5(ticket, nuevo_sl):
         "comment": "Trailing stop automatizado",
     }
 
-    resultado = mt5.order_send(solicitud)
+    try:
+        resultado = mt5.order_send(solicitud)
+    except Exception as error:
+        print(f"Excepción al enviar la orden de modificación de SL para {ticket}: {error}")
+        resultado = None
 
+    if resultado is None:
+        motivo = "Sin respuesta del servidor al enviar la orden de modificación de SL (posible caída de conexión)"
+        print(f"Error al modificar SL de posición {ticket}: {motivo}")
+        return {"exito": False, "motivo": motivo}
     if resultado.retcode == mt5.TRADE_RETCODE_DONE:
         print(f"SL actualizado para posición {ticket}: nuevo SL {nuevo_sl}")
         return {"exito": True, "motivo": None}
