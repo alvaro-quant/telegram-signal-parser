@@ -1,6 +1,7 @@
 from parsers import parse_message
 from storage import guardar_senal, cargar_senales
-
+from state_manager import cargar_posiciones
+cargar_posiciones()
 
 texto_entrada = """🟢 Entry Signal
 
