@@ -21,7 +21,7 @@ def procesar_senal(senal):
                 senal["position_id"],
                 resultado["ticket"],
                 senal["symbol"],
-                LOTE_FIJO,
+                resultado["volumen_ejecutado"],
                 senal["side"],   # <-- nuevo
             )
         else:
