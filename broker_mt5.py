@@ -40,7 +40,7 @@ def asegurar_conexion():
         print(f"Error al conectar a MT5: {mt5.last_error()}")
         return False
 
-from config import LOTE_FIJO, MAPEO_SIMBOLOS
+from config import LOTE_FIJO, MAPEO_SIMBOLOS, MAGIC_NUMBER
 def abrir_operacion_mt5(symbol, lot, side):
     conectado = asegurar_conexion()
     if not conectado:
@@ -70,7 +70,7 @@ def abrir_operacion_mt5(symbol, lot, side):
         "type": tipo_orden,
         "price": precio,
         "deviation": 20,
-        "magic": 123456,
+        "magic": MAGIC_NUMBER,
         "comment": "Apertura automatizada",
     }
 
@@ -140,7 +140,7 @@ def cerrar_operacion_mt5(ticket):
         "position": ticket,
         "price": precio,
         "deviation": 20,
-        "magic": 123456,
+        "magic": MAGIC_NUMBER,
         "comment": "Cierre automatizado",
     }
 
@@ -181,7 +181,7 @@ def modificar_sl_mt5(ticket, nuevo_sl):
         "position": ticket,
         "sl": nuevo_sl,
         "tp": posicion.tp,  # reenviamos el TP actual para no borrarlo
-        "magic": 123456,
+        "magic": MAGIC_NUMBER,
         "comment": "Trailing stop automatizado",
     }
 
