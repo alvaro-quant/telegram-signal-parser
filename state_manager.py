@@ -2,6 +2,7 @@
 import json
 import os
 import MetaTrader5 as mt5
+from broker_mt5 import asegurar_conexion
 from config import MAGIC_NUMBER
 
 NOMBRE_ARCHIVO_POSICIONES = "posiciones.json"
@@ -83,6 +84,10 @@ def reconciliar_estado():
     # Pedimos a MT5 todas las posiciones abiertas en la cuenta.
     # mt5.positions_get() no filtra por magic number directamente,
     # así que vamos a filtrar nosotros mismos después.
+    conectado = asegurar_conexion()
+    if not conectado:
+        print("No se pudo conectar a MT5. Reconciliación cancelada.")
+        return
     posiciones_mt5 = mt5.positions_get()
 
     if posiciones_mt5 is None:
