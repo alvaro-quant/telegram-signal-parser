@@ -1,0 +1,16 @@
+# 1. SEGURIDAD CRÍTICA (Nunca enviar a gateways externos)
+.env
+*.session
+*.session-journal
+
+# 2. AHORRO DE TOKENS (Evita gastar miles de tokens en dependencias o temporales)
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+
+# 3. DATOS LOCALES VOLÁTILES
+posiciones.json
+senales.json
