@@ -1,8 +1,6 @@
 # state_manager.py
 import json
 import os
-import MetaTrader5 as mt5
-from broker_mt5 import asegurar_conexion
 from config import MAGIC_NUMBER
 
 NOMBRE_ARCHIVO_POSICIONES = "posiciones.json"
@@ -81,6 +79,8 @@ def reconciliar_estado():
     desde disco) contra las posiciones reales que existen en MT5,
     y corrige el estado local si hay diferencias.
     """
+    from broker_mt5 import asegurar_conexion, mt5
+
     # Pedimos a MT5 todas las posiciones abiertas en la cuenta.
     # mt5.positions_get() no filtra por magic number directamente,
     # así que vamos a filtrar nosotros mismos después.
