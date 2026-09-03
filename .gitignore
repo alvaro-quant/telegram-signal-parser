@@ -20,8 +20,10 @@ Thumbs.db
 # Sesion telegram
 *.session
 
-# Archivo de senales
+# Archivos runtime del bot
 senales.json
-
 posiciones.json
+historial_deals_bot.csv
+message_ids_procesados.json
+*.session-journal
 scripts_temporales/

@@ -51,6 +51,14 @@ def abrir_operacion_mt5(symbol, lot, side):
     # necesita traducción y lo usamos tal cual.
     symbol_broker = MAPEO_SIMBOLOS.get(symbol, symbol)
 
+    # Forzamos la visibilidad del símbolo en Market Watch antes de pedir
+    # cotización. Esto ayuda con símbolos que existen en el servidor pero
+    # están ocultos en la terminal, como ocurre a veces en Exness.
+    seleccion_exitosa = mt5.symbol_select(symbol_broker, True)
+    if not seleccion_exitosa:
+        motivo = f"No se pudo habilitar el símbolo {symbol_broker} en Market Watch"
+        return {"exito": False, "ticket": None, "motivo": motivo}
+
     tick = mt5.symbol_info_tick(symbol_broker)
     if tick is None:
         motivo = f"No se pudo obtener precio para {symbol_broker}"
