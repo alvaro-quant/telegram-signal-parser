@@ -53,6 +53,16 @@ def obtener_procesador_senal() -> ProcesadorSenal:
     return procesar_senal
 
 
+def reconciliar_estado_en_caliente() -> None:
+    """
+    Ejecuta la reconciliación del estado local contra MT5 de forma diferida
+    para no acoplar imports de broker/engine en import time.
+    """
+    from state_manager import reconciliar_estado
+
+    reconciliar_estado()
+
+
 def procesar_mensaje_telegram(
     mensaje: Any,
     procesador: ProcesadorSenal | None = None,
@@ -85,6 +95,7 @@ def procesar_mensaje_telegram(
     procesador_real(resultado)
     guardar_senal(resultado)
     registrar_message_id_procesado(message_id)
+    reconciliar_estado_en_caliente()
 
 
 async def recuperar_historial(

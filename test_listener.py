@@ -36,6 +36,7 @@ def test_recuperar_historial_procesa_mensajes_en_orden_cronologico():
 
     with patch("listener.message_id_ya_procesado", return_value=False), \
          patch("listener.parse_message", side_effect=lambda texto: parseados[texto]), \
+         patch("listener.reconciliar_estado_en_caliente") as reconciliar_mock, \
          patch("listener.guardar_senal"), \
          patch("listener.registrar_message_id_procesado"):
         asyncio.run(listener.recuperar_historial(client, 12345, limite=2, procesador=procesador))
@@ -45,6 +46,7 @@ def test_recuperar_historial_procesa_mensajes_en_orden_cronologico():
         call({"type": "ENTRY", "position_id": "old"}),
         call({"type": "ENTRY", "position_id": "new"}),
     ]
+    assert reconciliar_mock.call_count == 2
 
 
 
@@ -54,6 +56,7 @@ def test_procesar_mensaje_telegram_omite_ids_ya_procesados():
 
     with patch("listener.message_id_ya_procesado", return_value=True), \
          patch("listener.parse_message") as parse_message_mock, \
+         patch("listener.reconciliar_estado_en_caliente") as reconciliar_mock, \
          patch("listener.guardar_senal") as guardar_senal_mock, \
          patch("listener.registrar_message_id_procesado") as registrar_id_mock:
         listener.procesar_mensaje_telegram(mensaje, procesador=procesador)
@@ -62,6 +65,7 @@ def test_procesar_mensaje_telegram_omite_ids_ya_procesados():
     guardar_senal_mock.assert_not_called()
     registrar_id_mock.assert_not_called()
     procesador.assert_not_called()
+    reconciliar_mock.assert_not_called()
 
 
 
@@ -71,6 +75,7 @@ def test_procesar_mensaje_telegram_registra_ids_de_mensajes_no_validos():
 
     with patch("listener.message_id_ya_procesado", return_value=False), \
          patch("listener.parse_message", return_value=None), \
+         patch("listener.reconciliar_estado_en_caliente") as reconciliar_mock, \
          patch("listener.guardar_senal") as guardar_senal_mock, \
          patch("listener.registrar_message_id_procesado") as registrar_id_mock:
         listener.procesar_mensaje_telegram(mensaje, procesador=procesador)
@@ -78,6 +83,7 @@ def test_procesar_mensaje_telegram_registra_ids_de_mensajes_no_validos():
     guardar_senal_mock.assert_not_called()
     procesador.assert_not_called()
     registrar_id_mock.assert_called_once_with(456)
+    reconciliar_mock.assert_not_called()
 
 
 
@@ -88,6 +94,7 @@ def test_procesar_mensaje_telegram_procesa_y_guarda_senales_validas():
 
     with patch("listener.message_id_ya_procesado", return_value=False), \
          patch("listener.parse_message", return_value=senal), \
+         patch("listener.reconciliar_estado_en_caliente") as reconciliar_mock, \
          patch("listener.guardar_senal") as guardar_senal_mock, \
          patch("listener.registrar_message_id_procesado") as registrar_id_mock:
         listener.procesar_mensaje_telegram(mensaje, procesador=procesador)
@@ -95,3 +102,4 @@ def test_procesar_mensaje_telegram_procesa_y_guarda_senales_validas():
     procesador.assert_called_once_with(senal)
     guardar_senal_mock.assert_called_once_with(senal)
     registrar_id_mock.assert_called_once_with(789)
+    reconciliar_mock.assert_called_once_with()
