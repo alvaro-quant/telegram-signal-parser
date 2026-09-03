@@ -1,36 +1,119 @@
 import os
+from typing import Any, Callable
+
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
+
 from parsers import parse_message
-from storage import guardar_senal
+from storage import (
+    guardar_senal,
+    message_id_ya_procesado,
+    registrar_message_id_procesado,
+)
 
-load_dotenv()
-
-api_id_texto = os.getenv("TELEGRAM_API_ID")
-api_hash = os.getenv("TELEGRAM_API_HASH")
-
-api_id = int(api_id_texto)
-
-client = TelegramClient("signal_listener_session", api_id, api_hash)
-
-ID_CANAL_SENALES = int(os.getenv("ID_CANAL"))
+ProcesadorSenal = Callable[[dict[str, Any]], None]
 
 
-@client.on(events.NewMessage(chats=ID_CANAL_SENALES))
-async def manejar_mensaje_nuevo(evento):
-    texto_mensaje = evento.message.text
-    resultado = parse_message(texto_mensaje)
+def crear_client(nombre_sesion: str = "signal_listener_session") -> TelegramClient:
+    """
+    Crea y devuelve un cliente de Telethon usando las credenciales cargadas
+    desde variables de entorno.
+    """
+    load_dotenv()
+
+    api_id_texto = os.getenv("TELEGRAM_API_ID")
+    api_hash = os.getenv("TELEGRAM_API_HASH")
+
+    if not api_id_texto or not api_hash:
+        raise ValueError("Faltan TELEGRAM_API_ID o TELEGRAM_API_HASH en el entorno.")
+
+    return TelegramClient(nombre_sesion, int(api_id_texto), api_hash)
+
+
+def obtener_id_canal_senales() -> int:
+    """
+    Lee y valida el ID del canal de señales desde variables de entorno.
+    """
+    load_dotenv()
+
+    channel_id_texto = os.getenv("ID_CANAL")
+    if not channel_id_texto:
+        raise ValueError("Falta ID_CANAL en el entorno.")
+
+    return int(channel_id_texto)
+
+
+def obtener_procesador_senal() -> ProcesadorSenal:
+    """
+    Resuelve de forma diferida el procesador real de señales para evitar
+    dependencias innecesarias durante la importación del módulo.
+    """
+    from engine import procesar_senal
+
+    return procesar_senal
+
+
+def procesar_mensaje_telegram(
+    mensaje: Any,
+    procesador: ProcesadorSenal | None = None,
+) -> None:
+    """
+    Procesa un mensaje individual de Telegram respetando la deduplicación por
+    `message_id` y reutilizando el flujo común de parseo, ejecución y storage.
+    """
+    message_id = mensaje.id
+
+    if message_id_ya_procesado(message_id):
+        print(f"Mensaje {message_id} ya procesado. Se omite.")
+        return
+
+    texto_mensaje = getattr(mensaje, "text", "") or ""
+    resultado = parse_message(texto_mensaje) if texto_mensaje else None
+
     if resultado is None:
         print("Mensaje recibido, pero no fue reconocido como señal:")
-        print(texto_mensaje)
-    else:
-        print("----- Señal parseada -----")
-        print(resultado)
-        print("---------------------------")
-        guardar_senal(resultado)    
+        print(texto_mensaje if texto_mensaje else "<sin texto>")
+        registrar_message_id_procesado(message_id)
+        return
 
-client.start()
+    procesador_real = procesador or obtener_procesador_senal()
 
-print("Escuchando mensajes nuevos... (presiona Ctrl+C para detener)")
+    print("----- Señal parseada -----")
+    print(resultado)
+    print("---------------------------")
 
-client.run_until_disconnected()
+    procesador_real(resultado)
+    guardar_senal(resultado)
+    registrar_message_id_procesado(message_id)
+
+
+async def recuperar_historial(
+    client: TelegramClient,
+    channel_id: int,
+    limite: int = 50,
+    procesador: ProcesadorSenal | None = None,
+) -> None:
+    """
+    Recupera mensajes históricos del canal y los procesa en orden cronológico
+    real, del más antiguo al más nuevo.
+    """
+    mensajes = []
+    async for mensaje in client.iter_messages(channel_id, limit=limite):
+        mensajes.append(mensaje)
+
+    for mensaje in reversed(mensajes):
+        procesar_mensaje_telegram(mensaje, procesador=procesador)
+
+
+def registrar_handler_mensajes_nuevos(
+    client: TelegramClient,
+    channel_id: int,
+    procesador: ProcesadorSenal | None = None,
+) -> None:
+    """
+    Registra el handler de mensajes nuevos para el canal indicado.
+    """
+
+    @client.on(events.NewMessage(chats=channel_id))
+    async def manejar_mensaje_nuevo(evento: Any) -> None:
+        procesar_mensaje_telegram(evento.message, procesador=procesador)
