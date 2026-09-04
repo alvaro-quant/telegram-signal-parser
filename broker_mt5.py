@@ -125,6 +125,43 @@ def obtener_metricas_cierre_mt5(ticket):
 
 
 
+def obtener_flotante_posiciones_abiertas():
+    resultado_posiciones = obtener_posiciones_abiertas_del_bot()
+    if not resultado_posiciones["exito"]:
+        return {
+            "exito": False,
+            "motivo": resultado_posiciones["motivo"],
+            "total_tickets": 0,
+            "flotante_total_usd": 0.0,
+            "por_simbolo": {},
+        }
+
+    posiciones_abiertas = resultado_posiciones["posiciones"]
+    por_simbolo = {}
+    flotante_total = 0.0
+
+    for posicion in posiciones_abiertas:
+        symbol = getattr(posicion, "symbol", "UNKNOWN")
+        profit = float(getattr(posicion, "profit", 0.0) or 0.0)
+        flotante_total += profit
+        if symbol not in por_simbolo:
+            por_simbolo[symbol] = {
+                "tickets": 0,
+                "flotante_usd": 0.0,
+            }
+        por_simbolo[symbol]["tickets"] += 1
+        por_simbolo[symbol]["flotante_usd"] += profit
+
+    return {
+        "exito": True,
+        "motivo": None,
+        "total_tickets": len(posiciones_abiertas),
+        "flotante_total_usd": flotante_total,
+        "por_simbolo": por_simbolo,
+    }
+
+
+
 def obtener_spread_actual(symbol):
     conectado = asegurar_conexion()
     if not conectado:

@@ -1,6 +1,7 @@
 import sqlite3
 from pathlib import Path
 
+from broker_mt5 import obtener_flotante_posiciones_abiertas
 from config import TELEMETRY_DB_PATH
 
 
@@ -122,6 +123,33 @@ def formatear_tabla(headers: list[str], rows: list[list[str]]) -> str:
 
 
 
+def obtener_exposicion_abierta(rows: list[sqlite3.Row]) -> dict[str, object]:
+    abiertas_db = [row for row in rows if row["closed_at_utc"] is None and row["signal_type"] == "ENTRY"]
+    resultado_mt5 = obtener_flotante_posiciones_abiertas()
+
+    if not resultado_mt5["exito"]:
+        return {
+            "mt5_disponible": False,
+            "motivo": resultado_mt5["motivo"],
+            "operaciones_abiertas_db": len(abiertas_db),
+            "total_tickets": len(abiertas_db),
+            "flotante_total_usd": None,
+            "equidad_neta_estimada": None,
+            "por_simbolo": {},
+        }
+
+    return {
+        "mt5_disponible": True,
+        "motivo": None,
+        "operaciones_abiertas_db": len(abiertas_db),
+        "total_tickets": resultado_mt5["total_tickets"],
+        "flotante_total_usd": resultado_mt5["flotante_total_usd"],
+        "equidad_neta_estimada": resultado_mt5["flotante_total_usd"],
+        "por_simbolo": resultado_mt5["por_simbolo"],
+    }
+
+
+
 def generar_reporte(db_path: Path | str = DB_PATH) -> str:
     rows = cargar_metricas(db_path)
     if not rows:
@@ -129,6 +157,7 @@ def generar_reporte(db_path: Path | str = DB_PATH) -> str:
 
     resumen = calcular_resumen(rows)
     desglose = calcular_desglose_por_simbolo(rows)
+    exposicion = obtener_exposicion_abierta(rows)
 
     tabla_resumen = formatear_tabla(
         ["Métrica", "Valor"],
@@ -140,6 +169,23 @@ def generar_reporte(db_path: Path | str = DB_PATH) -> str:
             ["PnL total USD", _fmt_numero(resumen["pnl_total"])],
             ["Latencia media s", _fmt_numero(resumen["latencia_media"])],
             ["Slippage medio", _fmt_numero(resumen["slippage_medio"])],
+        ],
+    )
+
+    tabla_exposicion = formatear_tabla(
+        ["Métrica", "Valor"],
+        [
+            ["Operaciones abiertas DB", _fmt_numero(exposicion["operaciones_abiertas_db"], 0)],
+            ["Operaciones Abiertas", _fmt_numero(exposicion["total_tickets"], 0)],
+            ["Flotante USD actual", _fmt_numero(exposicion["flotante_total_usd"])],
+            [
+                "Equidad neta estimada",
+                _fmt_numero(
+                    resumen["pnl_total"] + exposicion["flotante_total_usd"]
+                    if exposicion["flotante_total_usd"] is not None
+                    else None
+                ),
+            ],
         ],
     )
 
@@ -158,12 +204,48 @@ def generar_reporte(db_path: Path | str = DB_PATH) -> str:
         filas_simbolo,
     )
 
-    return (
-        "Resumen general\n"
-        f"{tabla_resumen}\n\n"
-        "Desglose por símbolo\n"
-        f"{tabla_simbolos}"
+    bloques = [
+        "Resumen general",
+        tabla_resumen,
+        "",
+        "Exposición Abierta y Flotante en Vivo",
+        tabla_exposicion,
+    ]
+
+    if exposicion["mt5_disponible"]:
+        filas_flotante = [
+            [
+                symbol,
+                _fmt_numero(datos["tickets"], 0),
+                _fmt_numero(datos["flotante_usd"]),
+            ]
+            for symbol, datos in sorted(exposicion["por_simbolo"].items())
+        ]
+        if filas_flotante:
+            bloques.extend(
+                [
+                    "",
+                    "Flotante por símbolo",
+                    formatear_tabla(["Símbolo", "Tickets", "Flotante USD"], filas_flotante),
+                ]
+            )
+    else:
+        bloques.extend(
+            [
+                "",
+                f"MT5 no disponible: mostrando solo PnL cerrado ({exposicion['motivo']}).",
+            ]
+        )
+
+    bloques.extend(
+        [
+            "",
+            "Desglose por símbolo",
+            tabla_simbolos,
+        ]
     )
+
+    return "\n".join(bloques)
 
 
 

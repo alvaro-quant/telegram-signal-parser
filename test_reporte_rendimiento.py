@@ -1,5 +1,6 @@
 import sqlite3
 from pathlib import Path
+from unittest.mock import patch
 
 from reporte_rendimiento import generar_reporte
 
@@ -75,7 +76,20 @@ def test_generar_reporte_muestra_metricas_clave(tmp_path):
     ruta_db = tmp_path / "report.db"
     _crear_db_con_datos(ruta_db)
 
-    reporte = generar_reporte(ruta_db)
+    with patch(
+        "reporte_rendimiento.obtener_flotante_posiciones_abiertas",
+        return_value={
+            "exito": True,
+            "motivo": None,
+            "total_tickets": 2,
+            "flotante_total_usd": -7.5,
+            "por_simbolo": {
+                "BTCUSDm": {"tickets": 1, "flotante_usd": 4.0},
+                "XAUUSDm": {"tickets": 1, "flotante_usd": -11.5},
+            },
+        },
+    ):
+        reporte = generar_reporte(ruta_db)
 
     assert "Resumen general" in reporte
     assert "Total señales" in reporte
@@ -90,6 +104,13 @@ def test_generar_reporte_muestra_metricas_clave(tmp_path):
     assert "3.33" in reporte
     assert "Slippage medio" in reporte
     assert "2.70" in reporte
+    assert "Exposición Abierta y Flotante en Vivo" in reporte
+    assert "Operaciones Abiertas" in reporte
+    assert "Flotante USD actual" in reporte
+    assert "-7.50" in reporte
+    assert "Equidad neta estimada" in reporte
+    assert "7.50" in reporte
+    assert "Flotante por símbolo" in reporte
     assert "BTCUSDm" in reporte
     assert "XAUUSDm" in reporte
     assert "Profit factor" in reporte
@@ -104,3 +125,27 @@ def test_generar_reporte_sin_operaciones_muestra_mensaje_limpio(tmp_path):
     reporte = generar_reporte(ruta_db)
 
     assert reporte == "No hay operaciones registradas aún en telemetría."
+
+
+
+def test_generar_reporte_degrada_limpio_si_mt5_no_esta_disponible(tmp_path):
+    ruta_db = tmp_path / "report_mt5_down.db"
+    _crear_db_con_datos(ruta_db)
+
+    with patch(
+        "reporte_rendimiento.obtener_flotante_posiciones_abiertas",
+        return_value={
+            "exito": False,
+            "motivo": "No se pudo conectar a MT5",
+            "total_tickets": 0,
+            "flotante_total_usd": 0.0,
+            "por_simbolo": {},
+        },
+    ):
+        reporte = generar_reporte(ruta_db)
+
+    assert "Exposición Abierta y Flotante en Vivo" in reporte
+    assert "Operaciones abiertas DB" in reporte
+    assert "MT5 no disponible: mostrando solo PnL cerrado" in reporte
+    assert "No se pudo conectar a MT5" in reporte
+    assert "Flotante por símbolo" not in reporte
