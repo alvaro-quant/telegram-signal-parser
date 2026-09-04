@@ -8,6 +8,11 @@
 # posiciones pequeñas mientras el sistema esté en fase de pruebas.
 LOTE_FIJO = 0.01
 MAX_ANTIGUEDAD_ENTRY_MINUTOS: int = 5
+SPREAD_MAXIMO_PERMITIDO = {
+    "BTCUSDm": 30.0,
+    "XAUUSDm": 1.5,
+}
+TELEMETRY_DB_PATH = "telemetry.db"
 MAPEO_SIMBOLOS = {
     "BTCUSD": "BTCUSDm",
     "XAUUSD": "XAUUSDm",

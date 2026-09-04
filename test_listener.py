@@ -43,10 +43,15 @@ def test_recuperar_historial_procesa_mensajes_en_orden_cronologico():
         asyncio.run(listener.recuperar_historial(client, 12345, limite=2, procesador=procesador))
 
     client.iter_messages.assert_called_once_with(12345, limit=2)
-    assert procesador.call_args_list == [
-        call({"type": "ENTRY", "position_id": "old"}),
-        call({"type": "ENTRY", "position_id": "new"}),
-    ]
+    assert procesador.call_count == 2
+    primera_senal = procesador.call_args_list[0].args[0]
+    segunda_senal = procesador.call_args_list[1].args[0]
+    assert primera_senal["type"] == "ENTRY"
+    assert primera_senal["position_id"] == "old"
+    assert primera_senal["message_id"] == 100
+    assert segunda_senal["type"] == "ENTRY"
+    assert segunda_senal["position_id"] == "new"
+    assert segunda_senal["message_id"] == 200
     assert reconciliar_mock.call_count == 2
 
 
@@ -100,7 +105,11 @@ def test_procesar_mensaje_telegram_procesa_y_guarda_senales_validas():
          patch("listener.registrar_message_id_procesado") as registrar_id_mock:
         listener.procesar_mensaje_telegram(mensaje, procesador=procesador)
 
-    procesador.assert_called_once_with(senal)
+    procesador.assert_called_once()
+    senal_procesada = procesador.call_args.args[0]
+    assert senal_procesada["type"] == "ENTRY"
+    assert senal_procesada["position_id"] == "6bcb96ff"
+    assert senal_procesada["message_id"] == 789
     guardar_senal_mock.assert_called_once_with(senal)
     registrar_id_mock.assert_called_once_with(789)
     reconciliar_mock.assert_called_once_with()
@@ -126,7 +135,12 @@ def test_procesar_mensaje_telegram_procesa_entry_reciente():
         datetime_mock.now.return_value = ahora
         listener.procesar_mensaje_telegram(mensaje, procesador=procesador)
 
-    procesador.assert_called_once_with(senal)
+    procesador.assert_called_once()
+    senal_procesada = procesador.call_args.args[0]
+    assert senal_procesada["type"] == "ENTRY"
+    assert senal_procesada["position_id"] == "recent"
+    assert senal_procesada["message_id"] == 790
+    assert senal_procesada["message_timestamp_utc"] == "2026-01-01T11:59:00+00:00"
     guardar_senal_mock.assert_called_once_with(senal)
     registrar_id_mock.assert_called_once_with(790)
     reconciliar_mock.assert_called_once_with()

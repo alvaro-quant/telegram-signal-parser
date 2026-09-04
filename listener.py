@@ -7,6 +7,7 @@ from telethon import TelegramClient, events
 
 from parsers import parse_message
 from config import MAX_ANTIGUEDAD_ENTRY_MINUTOS
+from logger import logger
 from storage import (
     guardar_senal,
     message_id_ya_procesado,
@@ -16,13 +17,21 @@ from storage import (
 ProcesadorSenal = Callable[[dict[str, Any]], None]
 
 
-def _obtener_antiguedad_minutos(mensaje: Any) -> float:
+def _normalizar_fecha_mensaje(mensaje: Any) -> datetime | None:
     fecha_mensaje = getattr(mensaje, "date", None)
     if fecha_mensaje is None:
-        return 0.0
+        return None
 
     if fecha_mensaje.tzinfo is None:
-        fecha_mensaje = fecha_mensaje.replace(tzinfo=timezone.utc)
+        return fecha_mensaje.replace(tzinfo=timezone.utc)
+
+    return fecha_mensaje.astimezone(timezone.utc)
+
+
+def _obtener_antiguedad_minutos(mensaje: Any) -> float:
+    fecha_mensaje = _normalizar_fecha_mensaje(mensaje)
+    if fecha_mensaje is None:
+        return 0.0
 
     return (datetime.now(timezone.utc) - fecha_mensaje).total_seconds() / 60
 
@@ -87,35 +96,42 @@ def procesar_mensaje_telegram(
     message_id = mensaje.id
 
     if message_id_ya_procesado(message_id):
-        print(f"Mensaje {message_id} ya procesado. Se omite.")
+        logger.info("Mensaje %s ya procesado. Se omite.", message_id)
         return
 
     texto_mensaje = getattr(mensaje, "text", "") or ""
     resultado = parse_message(texto_mensaje) if texto_mensaje else None
 
     if resultado is None:
-        print("Mensaje recibido, pero no fue reconocido como señal:")
-        print(texto_mensaje if texto_mensaje else "<sin texto>")
+        logger.warning(
+            "Mensaje recibido, pero no fue reconocido como señal: %s",
+            texto_mensaje if texto_mensaje else "<sin texto>",
+        )
         registrar_message_id_procesado(message_id)
         return
 
     procesador_real = procesador or obtener_procesador_senal()
 
-    print("----- Señal parseada -----")
-    print(resultado)
-    print("---------------------------")
+    logger.info("Señal parseada: %s", resultado)
 
     if resultado["type"] == "ENTRY":
         antiguedad_minutos = _obtener_antiguedad_minutos(mensaje)
         if antiguedad_minutos > MAX_ANTIGUEDAD_ENTRY_MINUTOS:
-            print(
-                f"ENTRY omitida por antigüedad: {antiguedad_minutos:.1f} minutos "
-                f"(message_id={message_id})"
+            logger.warning(
+                "ENTRY omitida por antigüedad: %.1f minutos (message_id=%s)",
+                antiguedad_minutos,
+                message_id,
             )
             registrar_message_id_procesado(message_id)
             return
 
-    procesador_real(resultado)
+    senal_para_procesar = dict(resultado)
+    fecha_mensaje = _normalizar_fecha_mensaje(mensaje)
+    if fecha_mensaje is not None:
+        senal_para_procesar["message_timestamp_utc"] = fecha_mensaje.isoformat()
+    senal_para_procesar["message_id"] = message_id
+
+    procesador_real(senal_para_procesar)
     guardar_senal(resultado)
     registrar_message_id_procesado(message_id)
     reconciliar_estado_en_caliente()

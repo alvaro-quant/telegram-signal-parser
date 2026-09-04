@@ -6,9 +6,43 @@
 #   - EXIT -> cerrar la posición asociada
 #   - TRAILING_STOP_* -> por ahora, solo registrar en consola
 
+from datetime import datetime, timezone
+
 from state_manager import abrir_posicion, cerrar_posicion, obtener_posicion, actualizar_sl
 from config import LOTE_FIJO
 from broker_mt5 import abrir_operacion_mt5, cerrar_operacion_mt5, modificar_sl_mt5
+from logger import logger
+from telemetry import registrar_trade_metric
+
+
+def _calcular_latencia_segundos(senal):
+    message_timestamp_utc = senal.get("message_timestamp_utc")
+    if not message_timestamp_utc:
+        return None
+
+    fecha_mensaje = datetime.fromisoformat(message_timestamp_utc)
+    if fecha_mensaje.tzinfo is None:
+        fecha_mensaje = fecha_mensaje.replace(tzinfo=timezone.utc)
+
+    return (datetime.now(timezone.utc) - fecha_mensaje).total_seconds()
+
+
+def _registrar_telemetria_entry(senal, resultado_broker, status):
+    try:
+        registrar_trade_metric(
+            symbol=resultado_broker.get("symbol_broker") or senal["symbol"],
+            signal_type=senal["type"],
+            telegram_price=senal.get("price"),
+            mt5_execution_price=resultado_broker.get("precio_ejecutado"),
+            spread=resultado_broker.get("spread_actual"),
+            latency_seconds=_calcular_latencia_segundos(senal),
+            position_id=senal.get("position_id"),
+            message_timestamp_utc=senal.get("message_timestamp_utc"),
+            status=status,
+            details=resultado_broker.get("motivo"),
+        )
+    except Exception as error:
+        logger.error("No se pudo registrar telemetría de ENTRY: %s", error)
 
 
 def procesar_senal(senal):
@@ -22,34 +56,51 @@ def procesar_senal(senal):
                 resultado["ticket"],
                 senal["symbol"],
                 resultado["volumen_ejecutado"],
-                senal["side"],   # <-- nuevo
+                senal["side"],
             )
+            _registrar_telemetria_entry(senal, resultado, "executed")
         else:
-            print(f"Advertencia: no se pudo abrir posición para {senal['position_id']}: {resultado['motivo']}")
+            logger.warning(
+                "No se pudo abrir posición para %s: %s",
+                senal["position_id"],
+                resultado["motivo"],
+            )
+            if resultado.get("rechazada_por_spread"):
+                _registrar_telemetria_entry(senal, resultado, "rejected_spread")
+            else:
+                _registrar_telemetria_entry(senal, resultado, "failed_broker")
 
     elif tipo == "EXIT":
         posicion = obtener_posicion(senal["position_id"])
         if posicion is None:
-            print(f"Advertencia: llegó EXIT para una posición desconocida: {senal['position_id']}")
+            logger.warning(
+                "Llegó EXIT para una posición desconocida: %s",
+                senal["position_id"],
+            )
         else:
             resultado = cerrar_operacion_mt5(posicion["mt5_ticket"])
             if resultado["exito"]:
                 cerrar_posicion(senal["position_id"])
             else:
-                print(f"Advertencia: no se pudo cerrar en MT5 la posición {senal['position_id']}: {resultado['motivo']}")
+                logger.warning(
+                    "No se pudo cerrar en MT5 la posición %s: %s",
+                    senal["position_id"],
+                    resultado["motivo"],
+                )
 
     elif tipo in ("TRAILING_STOP_ACTIVATED", "TRAILING_STOP_TIGHTENED"):
         posicion = obtener_posicion(senal["position_id"])
 
         if posicion is None:
-            print(f"Advertencia: trailing stop para posición desconocida: {senal['position_id']}")
+            logger.warning(
+                "Trailing stop para posición desconocida: %s",
+                senal["position_id"],
+            )
         else:
             sl_actual = posicion["sl"]
             nuevo_sl = senal["sl"]
             side = posicion["side"]
 
-            # Decidimos si el nuevo SL representa una mejora real,
-            # según la dirección de la posición.
             if sl_actual is None:
                 es_mejora = True
             elif side == "BUY":
@@ -58,16 +109,27 @@ def procesar_senal(senal):
                 es_mejora = nuevo_sl < sl_actual
 
             if not es_mejora:
-                print(f"Trailing stop ignorado para {senal['position_id']}: "
-                      f"nuevo SL {nuevo_sl} no mejora el SL actual {sl_actual}")
+                logger.info(
+                    "Trailing stop ignorado para %s: nuevo SL %s no mejora el SL actual %s",
+                    senal["position_id"],
+                    nuevo_sl,
+                    sl_actual,
+                )
             else:
                 resultado = modificar_sl_mt5(posicion["mt5_ticket"], nuevo_sl)
                 if resultado["exito"]:
                     actualizar_sl(senal["position_id"], nuevo_sl)
-                    print(f"Trailing stop aplicado para {senal['position_id']}: nuevo SL {nuevo_sl}")
+                    logger.info(
+                        "Trailing stop aplicado para %s: nuevo SL %s",
+                        senal["position_id"],
+                        nuevo_sl,
+                    )
                 else:
-                    print(f"Advertencia: no se pudo aplicar trailing stop en MT5 "
-                          f"para {senal['position_id']}: {resultado['motivo']}")
+                    logger.warning(
+                        "No se pudo aplicar trailing stop en MT5 para %s: %s",
+                        senal["position_id"],
+                        resultado["motivo"],
+                    )
 
     else:
-        print(f"Tipo de señal no reconocido, se ignora: {tipo}")
+        logger.warning("Tipo de señal no reconocido, se ignora: %s", tipo)

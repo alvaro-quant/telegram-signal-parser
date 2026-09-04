@@ -7,6 +7,7 @@
 import os
 from dotenv import load_dotenv
 import MetaTrader5 as mt5
+from logger import logger
 
 # Cargamos las variables del archivo .env apenas se importa este módulo.
 load_dotenv()
@@ -17,16 +18,11 @@ MT5_SERVER = os.getenv("MT5_SERVER")
 
 
 def asegurar_conexion():
-    # Primero preguntamos si ya hay una conexión activa con la terminal MT5.
     info_terminal = mt5.terminal_info()
 
     if info_terminal is not None:
-        # Ya estábamos conectados, no hace falta hacer nada más.
         return True
 
-    # Si llegamos aquí, no había conexión activa. Intentamos conectar,
-    # pasando las credenciales de forma explícita (no confiamos en que haya
-    # una sesión guardada previamente en la terminal).
     conexion_exitosa = mt5.initialize(
         login=MT5_LOGIN,
         password=MT5_PASSWORD,
@@ -34,42 +30,97 @@ def asegurar_conexion():
     )
 
     if conexion_exitosa:
-        print("Conexión a MT5 establecida.")
+        logger.info("Conexión a MT5 establecida.")
         return True
     else:
-        print(f"Error al conectar a MT5: {mt5.last_error()}")
+        logger.error("Error al conectar a MT5: %s", mt5.last_error())
         return False
 
-from config import LOTE_FIJO, MAPEO_SIMBOLOS, MAGIC_NUMBER
-def abrir_operacion_mt5(symbol, lot, side):
+from config import LOTE_FIJO, MAPEO_SIMBOLOS, MAGIC_NUMBER, SPREAD_MAXIMO_PERMITIDO
+
+def resolver_simbolo_broker(symbol):
+    return MAPEO_SIMBOLOS.get(symbol, symbol)
+
+
+def obtener_spread_actual(symbol):
     conectado = asegurar_conexion()
     if not conectado:
-        return {"exito": False, "ticket": None, "motivo": "No se pudo conectar a MT5"}
+        return {"exito": False, "motivo": "No se pudo conectar a MT5"}
 
-    # Traducimos el símbolo del bot ("BTCUSD") al símbolo real del bróker
-    # ("BTCUSDm"). Si el símbolo no está en el mapeo, asumimos que no
-    # necesita traducción y lo usamos tal cual.
-    symbol_broker = MAPEO_SIMBOLOS.get(symbol, symbol)
-
-    # Forzamos la visibilidad del símbolo en Market Watch antes de pedir
-    # cotización. Esto ayuda con símbolos que existen en el servidor pero
-    # están ocultos en la terminal, como ocurre a veces en Exness.
+    symbol_broker = resolver_simbolo_broker(symbol)
     seleccion_exitosa = mt5.symbol_select(symbol_broker, True)
     if not seleccion_exitosa:
         motivo = f"No se pudo habilitar el símbolo {symbol_broker} en Market Watch"
-        return {"exito": False, "ticket": None, "motivo": motivo}
+        return {"exito": False, "motivo": motivo, "symbol_broker": symbol_broker}
+
+    symbol_info = mt5.symbol_info(symbol_broker)
+    if symbol_info is None:
+        motivo = f"No se pudo obtener información del símbolo {symbol_broker}"
+        return {"exito": False, "motivo": motivo, "symbol_broker": symbol_broker}
 
     tick = mt5.symbol_info_tick(symbol_broker)
     if tick is None:
         motivo = f"No se pudo obtener precio para {symbol_broker}"
-        return {"exito": False, "ticket": None, "motivo": motivo}
+        return {"exito": False, "motivo": motivo, "symbol_broker": symbol_broker}
+
+    spread = tick.ask - tick.bid
+    return {
+        "exito": True,
+        "motivo": None,
+        "symbol_broker": symbol_broker,
+        "spread_actual": spread,
+        "bid": tick.bid,
+        "ask": tick.ask,
+        "digits": getattr(symbol_info, "digits", None),
+    }
+
+
+def abrir_operacion_mt5(symbol, lot, side):
+    info_spread = obtener_spread_actual(symbol)
+    if not info_spread["exito"]:
+        return {
+            "exito": False,
+            "ticket": None,
+            "volumen_ejecutado": None,
+            "precio_ejecutado": None,
+            "spread_actual": None,
+            "symbol_broker": info_spread.get("symbol_broker"),
+            "rechazada_por_spread": False,
+            "codigo_motivo": "MT5_DATA_ERROR",
+            "motivo": info_spread["motivo"],
+        }
+
+    symbol_broker = info_spread["symbol_broker"]
+    spread_actual = info_spread["spread_actual"]
+    spread_maximo = SPREAD_MAXIMO_PERMITIDO.get(symbol_broker)
+    if spread_maximo is not None and spread_actual > spread_maximo:
+        logger.warning(
+            "ENTRY rechazada por spread alto en %s: spread actual %.5f, máximo permitido %.5f",
+            symbol_broker,
+            spread_actual,
+            spread_maximo,
+        )
+        return {
+            "exito": False,
+            "ticket": None,
+            "volumen_ejecutado": None,
+            "precio_ejecutado": None,
+            "spread_actual": spread_actual,
+            "symbol_broker": symbol_broker,
+            "rechazada_por_spread": True,
+            "codigo_motivo": "SPREAD_TOO_HIGH",
+            "motivo": (
+                f"Spread actual {spread_actual:.5f} excede máximo permitido "
+                f"{spread_maximo:.5f} para {symbol_broker}"
+            ),
+        }
 
     if side == "BUY":
         tipo_orden = mt5.ORDER_TYPE_BUY
-        precio = tick.ask
+        precio = info_spread["ask"]
     else:
         tipo_orden = mt5.ORDER_TYPE_SELL
-        precio = tick.bid
+        precio = info_spread["bid"]
 
     solicitud = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -85,30 +136,65 @@ def abrir_operacion_mt5(symbol, lot, side):
     try:
         resultado = mt5.order_send(solicitud)
     except Exception as error:
-        print(f"Excepción al enviar la orden de apertura para {symbol_broker}: {error}")
+        logger.error("Excepción al enviar la orden de apertura para %s: %s", symbol_broker, error)
         resultado = None
 
     if resultado is None:
         motivo = "Sin respuesta del servidor al enviar la orden de apertura (posible caída de conexión)"
-        print(f"Orden rechazada: {motivo}")
-        return {"exito": False, "ticket": None, "volumen_ejecutado": None, "motivo": motivo}
+        logger.warning("Orden rechazada: %s", motivo)
+        return {
+            "exito": False,
+            "ticket": None,
+            "volumen_ejecutado": None,
+            "precio_ejecutado": None,
+            "spread_actual": spread_actual,
+            "symbol_broker": symbol_broker,
+            "rechazada_por_spread": False,
+            "codigo_motivo": "ORDER_SEND_NO_RESPONSE",
+            "motivo": motivo,
+        }
 
     if resultado.retcode == mt5.TRADE_RETCODE_DONE:
             volumen_ejecutado = resultado.volume
 
             if volumen_ejecutado < lot:
-                print(f"Advertencia: fill parcial. Solicitado {lot}, ejecutado {volumen_ejecutado}")
+                logger.warning(
+                    "Fill parcial. Solicitado %s, ejecutado %s",
+                    lot,
+                    volumen_ejecutado,
+                )
 
-            print(f"Orden ejecutada: {side} {volumen_ejecutado} lotes de {symbol_broker}, ticket {resultado.order}")
+            logger.info(
+                "Orden ejecutada: %s %s lotes de %s, ticket %s",
+                side,
+                volumen_ejecutado,
+                symbol_broker,
+                resultado.order,
+            )
             return {
                 "exito": True,
                 "ticket": resultado.order,
                 "volumen_ejecutado": volumen_ejecutado,
+                "precio_ejecutado": precio,
+                "spread_actual": spread_actual,
+                "symbol_broker": symbol_broker,
+                "rechazada_por_spread": False,
+                "codigo_motivo": None,
                 "motivo": None,
             }
     else:
-        print(f"Orden rechazada: {resultado.comment}")
-        return {"exito": False, "ticket": None, "volumen_ejecutado": None, "motivo": resultado.comment}
+        logger.warning("Orden rechazada: %s", resultado.comment)
+        return {
+            "exito": False,
+            "ticket": None,
+            "volumen_ejecutado": None,
+            "precio_ejecutado": None,
+            "spread_actual": spread_actual,
+            "symbol_broker": symbol_broker,
+            "rechazada_por_spread": False,
+            "codigo_motivo": "ORDER_REJECTED",
+            "motivo": resultado.comment,
+        }
 
 def cerrar_operacion_mt5(ticket):
     conectado = asegurar_conexion()
@@ -155,19 +241,19 @@ def cerrar_operacion_mt5(ticket):
     try:
         resultado = mt5.order_send(solicitud)
     except Exception as error:
-        print(f"Excepción al enviar la orden de cierre para {ticket}: {error}")
+        logger.error("Excepción al enviar la orden de cierre para %s: %s", ticket, error)
         resultado = None
 
     if resultado is None:
         motivo = "Sin respuesta del servidor al enviar la orden de cierre (posible caída de conexión)"
-        print(f"Error al cerrar posición {ticket}: {motivo}")
+        logger.warning("Error al cerrar posición %s: %s", ticket, motivo)
         return {"exito": False, "motivo": motivo}
 
     if resultado.retcode == mt5.TRADE_RETCODE_DONE:
-        print(f"Posición {ticket} cerrada correctamente.")
+        logger.info("Posición %s cerrada correctamente.", ticket)
         return {"exito": True, "motivo": None}
     else:
-        print(f"Error al cerrar posición {ticket}: {resultado.comment}")
+        logger.warning("Error al cerrar posición %s: %s", ticket, resultado.comment)
         return {"exito": False, "motivo": resultado.comment}
 # Corre solo si ejecutamos este archivo directamente, no si lo importamos desde otro módulo.
 def modificar_sl_mt5(ticket, nuevo_sl):
@@ -196,18 +282,18 @@ def modificar_sl_mt5(ticket, nuevo_sl):
     try:
         resultado = mt5.order_send(solicitud)
     except Exception as error:
-        print(f"Excepción al enviar la orden de modificación de SL para {ticket}: {error}")
+        logger.error("Excepción al enviar la orden de modificación de SL para %s: %s", ticket, error)
         resultado = None
 
     if resultado is None:
         motivo = "Sin respuesta del servidor al enviar la orden de modificación de SL (posible caída de conexión)"
-        print(f"Error al modificar SL de posición {ticket}: {motivo}")
+        logger.warning("Error al modificar SL de posición %s: %s", ticket, motivo)
         return {"exito": False, "motivo": motivo}
     if resultado.retcode == mt5.TRADE_RETCODE_DONE:
-        print(f"SL actualizado para posición {ticket}: nuevo SL {nuevo_sl}")
+        logger.info("SL actualizado para posición %s: nuevo SL %s", ticket, nuevo_sl)
         return {"exito": True, "motivo": None}
     else:
-        print(f"Error al modificar SL de posición {ticket}: {resultado.comment}")
+        logger.warning("Error al modificar SL de posición %s: %s", ticket, resultado.comment)
         return {"exito": False, "motivo": resultado.comment}
 
 if __name__ == "__main__":

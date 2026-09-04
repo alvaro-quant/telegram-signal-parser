@@ -27,3 +27,6 @@ historial_deals_bot.csv
 message_ids_procesados.json
 *.session-journal
 scripts_temporales/
+logs/
+*.db
+*.sqlite
