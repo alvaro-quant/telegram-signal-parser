@@ -10,9 +10,14 @@ from datetime import datetime, timezone
 
 from state_manager import abrir_posicion, cerrar_posicion, obtener_posicion, actualizar_sl
 from config import LOTE_FIJO
-from broker_mt5 import abrir_operacion_mt5, cerrar_operacion_mt5, modificar_sl_mt5
+from broker_mt5 import (
+    abrir_operacion_mt5,
+    cerrar_operacion_mt5,
+    modificar_sl_mt5,
+    obtener_metricas_cierre_mt5,
+)
 from logger import logger
-from telemetry import registrar_trade_metric
+from telemetry import registrar_trade_metric, registrar_cierre_metric
 
 
 def _calcular_latencia_segundos(senal):
@@ -37,12 +42,84 @@ def _registrar_telemetria_entry(senal, resultado_broker, status):
             spread=resultado_broker.get("spread_actual"),
             latency_seconds=_calcular_latencia_segundos(senal),
             position_id=senal.get("position_id"),
+            mt5_ticket=resultado_broker.get("ticket"),
+            side=senal.get("side"),
+            strategy=senal.get("strategy"),
             message_timestamp_utc=senal.get("message_timestamp_utc"),
             status=status,
             details=resultado_broker.get("motivo"),
         )
     except Exception as error:
         logger.error("No se pudo registrar telemetría de ENTRY: %s", error)
+
+
+
+def _calcular_pnl_points(senal, posicion, exit_price):
+    entry_price = senal.get("entry_price")
+    if entry_price is None or exit_price is None:
+        return None
+
+    side = (posicion or {}).get("side") or senal.get("side")
+    if side == "SELL":
+        return entry_price - exit_price
+    return exit_price - entry_price
+
+
+
+def _registrar_telemetria_cierre(senal, posicion, resultado_cierre):
+    try:
+        metricas_cierre = obtener_metricas_cierre_mt5(posicion["mt5_ticket"])
+        exit_price = senal.get("price")
+        pnl_usd = None
+        closed_at_utc = resultado_cierre.get("closed_at_utc")
+        exit_reason = senal.get("exit_reason")
+        details = None
+
+        if metricas_cierre.get("exito"):
+            exit_price = metricas_cierre.get("exit_price") or exit_price
+            pnl_usd = metricas_cierre.get("pnl_usd")
+            closed_at_utc = metricas_cierre.get("closed_at_utc") or closed_at_utc
+            exit_reason = exit_reason or metricas_cierre.get("exit_reason_broker")
+        else:
+            details = metricas_cierre.get("motivo")
+
+        registrar_cierre_metric(
+            position_id=senal.get("position_id"),
+            mt5_ticket=posicion.get("mt5_ticket"),
+            exit_price=exit_price,
+            exit_reason=exit_reason,
+            pnl_usd=pnl_usd,
+            pnl_pips_or_points=senal.get("pnl_pips_or_points") or _calcular_pnl_points(senal, posicion, exit_price),
+            duration_seconds=senal.get("duration_seconds"),
+            closed_at_utc=closed_at_utc or datetime.now(timezone.utc).isoformat(),
+            status="closed",
+            details=details,
+            reported_duration=senal.get("duration"),
+            reported_pnl=senal.get("pnl"),
+        )
+    except Exception as error:
+        logger.error("No se pudo registrar telemetría de cierre: %s", error)
+
+
+
+def registrar_cierre_reconciliado(position_id, detalle):
+    try:
+        metricas_cierre = obtener_metricas_cierre_mt5(detalle["mt5_ticket"])
+        registrar_cierre_metric(
+            position_id=position_id,
+            mt5_ticket=detalle.get("mt5_ticket"),
+            exit_price=metricas_cierre.get("exit_price"),
+            exit_reason=metricas_cierre.get("exit_reason_broker") or "reconciliacion_mt5",
+            pnl_usd=metricas_cierre.get("pnl_usd"),
+            pnl_pips_or_points=None,
+            duration_seconds=None,
+            closed_at_utc=metricas_cierre.get("closed_at_utc") or datetime.now(timezone.utc).isoformat(),
+            status="closed",
+            details=None if metricas_cierre.get("exito") else metricas_cierre.get("motivo"),
+        )
+    except Exception as error:
+        logger.error("No se pudo registrar cierre reconciliado: %s", error)
+
 
 
 def procesar_senal(senal):
@@ -80,6 +157,7 @@ def procesar_senal(senal):
         else:
             resultado = cerrar_operacion_mt5(posicion["mt5_ticket"])
             if resultado["exito"]:
+                _registrar_telemetria_cierre(senal, posicion, resultado)
                 cerrar_posicion(senal["position_id"])
             else:
                 logger.warning(

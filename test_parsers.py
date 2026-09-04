@@ -26,6 +26,7 @@ def test_parse_entry_signal_extrae_symbol_correctamente():
     assert resultado["side"] == "BUY"
     assert resultado["price"] == 64848.64
     assert resultado["position_id"] == "6bcb96ff"
+    assert resultado["strategy"] == "Drawdown DCA Long"
 
 
 def test_parse_trailing_stop_extrae_sl_correctamente():
@@ -80,6 +81,9 @@ Duration: 12m
     assert resultado["pnl"] == "+0.15%"
     assert resultado["exit_reason"] == "atr_trailing_stop"
     assert resultado["duration"] == "12m"
+    assert resultado["duration_seconds"] == 720.0
+    assert resultado["pnl_pips_or_points"] == 0.15
+    assert resultado["strategy"] == "Drawdown DCA Long"
 
 
 def test_parse_detecta_tipo_trailing_activated():

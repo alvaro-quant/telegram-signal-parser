@@ -5,6 +5,7 @@
 # o de forma de conectar, solo este archivo debería necesitar cambios.
 
 import os
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import MetaTrader5 as mt5
 from logger import logger
@@ -40,6 +41,88 @@ from config import LOTE_FIJO, MAPEO_SIMBOLOS, MAGIC_NUMBER, SPREAD_MAXIMO_PERMIT
 
 def resolver_simbolo_broker(symbol):
     return MAPEO_SIMBOLOS.get(symbol, symbol)
+
+
+
+def obtener_posiciones_abiertas_del_bot():
+    conectado = asegurar_conexion()
+    if not conectado:
+        return {"exito": False, "motivo": "No se pudo conectar a MT5", "posiciones": []}
+
+    posiciones_mt5 = mt5.positions_get()
+    if posiciones_mt5 is None:
+        return {
+            "exito": False,
+            "motivo": "No se pudo obtener posiciones desde MT5",
+            "posiciones": [],
+        }
+
+    posiciones_del_bot = [
+        posicion for posicion in posiciones_mt5 if posicion.magic == MAGIC_NUMBER
+    ]
+    return {"exito": True, "motivo": None, "posiciones": posiciones_del_bot}
+
+
+
+def _inferir_motivo_cierre_broker(deal) -> str | None:
+    reason = getattr(deal, "reason", None)
+    if reason == getattr(mt5, "DEAL_REASON_SL", object()):
+        return "sl_broker"
+    if reason == getattr(mt5, "DEAL_REASON_TP", object()):
+        return "tp_broker"
+    if reason == getattr(mt5, "DEAL_REASON_EXPERT", object()):
+        return "expert_broker"
+    if reason == getattr(mt5, "DEAL_REASON_CLIENT", object()):
+        return "manual_client"
+    return None
+
+
+
+def obtener_metricas_cierre_mt5(ticket):
+    conectado = asegurar_conexion()
+    if not conectado:
+        return {"exito": False, "motivo": "No se pudo conectar a MT5"}
+
+    ahora = datetime.now(timezone.utc)
+    desde = ahora - timedelta(days=7)
+
+    try:
+        deals = mt5.history_deals_get(desde, ahora)
+    except Exception as error:
+        logger.error("Excepción consultando histórico de deals para %s: %s", ticket, error)
+        deals = None
+
+    if deals is None:
+        return {
+            "exito": False,
+            "motivo": f"No se pudo obtener histórico de deals para ticket {ticket}",
+        }
+
+    deals_ticket = [deal for deal in deals if getattr(deal, "position_id", None) == ticket]
+    if not deals_ticket:
+        deals_ticket = [deal for deal in deals if getattr(deal, "order", None) == ticket]
+
+    if not deals_ticket:
+        return {
+            "exito": False,
+            "motivo": f"No se encontraron deals históricos para ticket {ticket}",
+        }
+
+    deal_cierre = sorted(deals_ticket, key=lambda deal: getattr(deal, "time", 0))[-1]
+    timestamp = getattr(deal_cierre, "time", None)
+    closed_at_utc = None
+    if timestamp is not None:
+        closed_at_utc = datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+
+    return {
+        "exito": True,
+        "motivo": None,
+        "exit_price": getattr(deal_cierre, "price", None),
+        "pnl_usd": getattr(deal_cierre, "profit", None),
+        "closed_at_utc": closed_at_utc,
+        "exit_reason_broker": _inferir_motivo_cierre_broker(deal_cierre),
+    }
+
 
 
 def obtener_spread_actual(symbol):
@@ -251,7 +334,12 @@ def cerrar_operacion_mt5(ticket):
 
     if resultado.retcode == mt5.TRADE_RETCODE_DONE:
         logger.info("Posición %s cerrada correctamente.", ticket)
-        return {"exito": True, "motivo": None}
+        return {
+            "exito": True,
+            "motivo": None,
+            "precio_cierre_solicitado": precio,
+            "closed_at_utc": datetime.now(timezone.utc).isoformat(),
+        }
     else:
         logger.warning("Error al cerrar posición %s: %s", ticket, resultado.comment)
         return {"exito": False, "motivo": resultado.comment}
