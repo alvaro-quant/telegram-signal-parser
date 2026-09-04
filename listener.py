@@ -1,10 +1,12 @@
 import os
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
 
 from parsers import parse_message
+from config import MAX_ANTIGUEDAD_ENTRY_MINUTOS
 from storage import (
     guardar_senal,
     message_id_ya_procesado,
@@ -12,6 +14,17 @@ from storage import (
 )
 
 ProcesadorSenal = Callable[[dict[str, Any]], None]
+
+
+def _obtener_antiguedad_minutos(mensaje: Any) -> float:
+    fecha_mensaje = getattr(mensaje, "date", None)
+    if fecha_mensaje is None:
+        return 0.0
+
+    if fecha_mensaje.tzinfo is None:
+        fecha_mensaje = fecha_mensaje.replace(tzinfo=timezone.utc)
+
+    return (datetime.now(timezone.utc) - fecha_mensaje).total_seconds() / 60
 
 
 def crear_client(nombre_sesion: str = "signal_listener_session") -> TelegramClient:
@@ -91,6 +104,16 @@ def procesar_mensaje_telegram(
     print("----- Señal parseada -----")
     print(resultado)
     print("---------------------------")
+
+    if resultado["type"] == "ENTRY":
+        antiguedad_minutos = _obtener_antiguedad_minutos(mensaje)
+        if antiguedad_minutos > MAX_ANTIGUEDAD_ENTRY_MINUTOS:
+            print(
+                f"ENTRY omitida por antigüedad: {antiguedad_minutos:.1f} minutos "
+                f"(message_id={message_id})"
+            )
+            registrar_message_id_procesado(message_id)
+            return
 
     procesador_real(resultado)
     guardar_senal(resultado)

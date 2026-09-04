@@ -7,6 +7,7 @@
 # se basa en DCA (promediar entrada) y aguantar caídas, así que preferimos
 # posiciones pequeñas mientras el sistema esté en fase de pruebas.
 LOTE_FIJO = 0.01
+MAX_ANTIGUEDAD_ENTRY_MINUTOS: int = 5
 MAPEO_SIMBOLOS = {
     "BTCUSD": "BTCUSDm",
     "XAUUSD": "XAUUSDm",

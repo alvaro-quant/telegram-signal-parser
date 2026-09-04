@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
@@ -103,3 +104,55 @@ def test_procesar_mensaje_telegram_procesa_y_guarda_senales_validas():
     guardar_senal_mock.assert_called_once_with(senal)
     registrar_id_mock.assert_called_once_with(789)
     reconciliar_mock.assert_called_once_with()
+
+
+
+def test_procesar_mensaje_telegram_procesa_entry_reciente():
+    ahora = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    mensaje = SimpleNamespace(
+        id=790,
+        text="entry reciente",
+        date=ahora - timedelta(minutes=1),
+    )
+    senal = {"type": "ENTRY", "position_id": "recent"}
+    procesador = Mock()
+
+    with patch("listener.datetime") as datetime_mock, \
+         patch("listener.message_id_ya_procesado", return_value=False), \
+         patch("listener.parse_message", return_value=senal), \
+         patch("listener.reconciliar_estado_en_caliente") as reconciliar_mock, \
+         patch("listener.guardar_senal") as guardar_senal_mock, \
+         patch("listener.registrar_message_id_procesado") as registrar_id_mock:
+        datetime_mock.now.return_value = ahora
+        listener.procesar_mensaje_telegram(mensaje, procesador=procesador)
+
+    procesador.assert_called_once_with(senal)
+    guardar_senal_mock.assert_called_once_with(senal)
+    registrar_id_mock.assert_called_once_with(790)
+    reconciliar_mock.assert_called_once_with()
+
+
+
+def test_procesar_mensaje_telegram_descarta_entry_antigua_y_registra_id():
+    ahora = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    mensaje = SimpleNamespace(
+        id=791,
+        text="entry antigua",
+        date=ahora - timedelta(minutes=15),
+    )
+    senal = {"type": "ENTRY", "position_id": "stale"}
+    procesador = Mock()
+
+    with patch("listener.datetime") as datetime_mock, \
+         patch("listener.message_id_ya_procesado", return_value=False), \
+         patch("listener.parse_message", return_value=senal), \
+         patch("listener.reconciliar_estado_en_caliente") as reconciliar_mock, \
+         patch("listener.guardar_senal") as guardar_senal_mock, \
+         patch("listener.registrar_message_id_procesado") as registrar_id_mock:
+        datetime_mock.now.return_value = ahora
+        listener.procesar_mensaje_telegram(mensaje, procesador=procesador)
+
+    procesador.assert_not_called()
+    guardar_senal_mock.assert_not_called()
+    registrar_id_mock.assert_called_once_with(791)
+    reconciliar_mock.assert_not_called()
