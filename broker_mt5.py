@@ -64,6 +64,31 @@ def obtener_posiciones_abiertas_del_bot():
 
 
 
+def obtener_precios_actuales_tickets_bot(tickets: list[int]) -> dict:
+    resultado_posiciones = obtener_posiciones_abiertas_del_bot()
+    if not resultado_posiciones["exito"]:
+        return {
+            "exito": False,
+            "motivo": resultado_posiciones["motivo"],
+            "precios": {},
+        }
+
+    tickets_consultados = set(tickets)
+    precios = {}
+    for posicion in resultado_posiciones["posiciones"]:
+        ticket = getattr(posicion, "ticket", None)
+        if ticket not in tickets_consultados:
+            continue
+        precios[ticket] = {
+            "symbol": getattr(posicion, "symbol", None),
+            "precio_actual": getattr(posicion, "price_current", None),
+            "profit": getattr(posicion, "profit", None),
+        }
+
+    return {"exito": True, "motivo": None, "precios": precios}
+
+
+
 def _inferir_motivo_cierre_broker(deal) -> str | None:
     reason = getattr(deal, "reason", None)
     if reason == getattr(mt5, "DEAL_REASON_SL", object()):
